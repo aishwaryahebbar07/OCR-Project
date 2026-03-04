@@ -1,0 +1,29 @@
+# Virtual Environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Large model files
+*.pb
+*.h5
+*.pt
+*.pth
+
+# Installed libraries folder (if exists)
+app/lib/
+
+# Environment variables
+.env
