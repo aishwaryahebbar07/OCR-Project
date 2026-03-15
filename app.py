@@ -16,7 +16,7 @@ from docx import Document
 
 # ===================== APP =====================
 app = Dash(__name__)
-app.title = "Smart OCR Dashboard"
+app.title = "OCR Dashboard"
 
 # ===================== OCR FUNCTION (EXTENDED FOR PDF, DOCX, TXT) =====================
 def extract_text_and_confidence(contents):
@@ -99,7 +99,7 @@ def extract_text_and_confidence(contents):
 # ===================== DOCUMENT TYPE DETECTION =====================
 def detect_document_type(text):
     t = text.lower()
-    if any(k in t for k in ["aadhaar", "pan", "uidai", "dob"]):
+    if any(k in t for k in ["aadhaar card", "pan card", "uidai", "dob"]):
         return "Identity Document"
     if any(k in t for k in ["certificate", "degree", "university", "college"]):
         return "Educational Certificate"
@@ -151,9 +151,9 @@ app.layout = html.Div(
                 html.Div(
                     style={"textAlign": "center", "marginBottom": "35px"},
                     children=[
-                        html.H1("📄 Smart OCR System", style={"color": "#2c3e50"}),
+                        html.H1("📄 OptiScan OCR", style={"color": "#2c3e50", "fontweight":"700"}),
                         html.P(
-                            "An OCR-Based Intelligent Text Extraction and Analysis System",
+                            html.I("An OCR-Based Intelligent Text Extraction and Analysis System"),
                             style={"color": "#555", "fontSize": "17px"}
                         )
                     ]
@@ -163,7 +163,7 @@ app.layout = html.Div(
                     id="upload-image",
                     children=html.Div([
                         html.I("📤 ", style={"fontSize": "26px"}),
-                        html.B("Click or Drag File Here")
+                        html.B("Upload Image/PDF/Docx/TXT")
                     ]), 
                     style={
                         "width": "100%",
@@ -173,9 +173,11 @@ app.layout = html.Div(
                         "borderStyle": "dashed",
                         "borderRadius": "15px",
                         "textAlign": "center",
-                        "background": "#f7f9fc",
+                        "background": "#eef1f6",
                         "cursor": "pointer",
-                        "marginBottom": "35px"
+                        "marginBottom": "35px",
+                        "boxShadow": "0 8px 20px rgba(0,0,0,0.08)" 
+
                     },
                     multiple=False,
                 ),
@@ -184,7 +186,7 @@ app.layout = html.Div(
     type="text",
     placeholder="🔍 Search word in document...",
     style={
-        "width": "100%",
+        "width": "98%",
         "padding": "12px",
         "borderRadius": "12px",
         "border": "1px solid #ccc",
@@ -199,10 +201,10 @@ app.layout = html.Div(
                         html.Div(
                             style={
                                 "width": "35%",
-                                "background": "#ffffff",
+                                "backgroundImage": "linear-gradient(to bottom, #f4f6f8 0%, #e9edf2 100%)",
                                 "borderRadius": "15px",
                                 "padding": "18px",
-                                "boxShadow": "0 10px 25px rgba(0,0,0,0.15)",
+                                "boxShadow": "0 20px 40px rgba(0,0,0,0.15)",
                                 "textAlign": "center"
                             },
                             children=[
@@ -217,10 +219,10 @@ app.layout = html.Div(
                         html.Div(
                             style={
                                 "width": "65%",
-                                "background": "#ffffff",
+                                "backgroundImage": "linear-gradient(to bottom, #f7f8fa 0%, #eff2f6 100%)",
                                 "borderRadius": "15px",
                                 "padding": "18px",
-                                "boxShadow": "0 10px 25px rgba(0,0,0,0.15)"
+                                "boxShadow": "0 15px 35px rgba(0,0,0,0.15)"
                             },
                             children=[
 
@@ -278,7 +280,8 @@ app.layout = html.Div(
                                                         "overflowY": "auto",
                                                         "background": "#f9f9f9",
                                                         "padding": "12px",
-                                                        "borderRadius": "8px"
+                                                        "borderRadius": "8px",
+                                                        "border":"1px solid #e0e0e0"
                                                     }
                                                 )
                                             ]
