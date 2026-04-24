@@ -5,71 +5,140 @@ import cv2
 import numpy as np
 import pytesseract
 import re
+from datetime import datetime
 
 from dash import Dash, html, dcc, Input, Output, State
 from PIL import Image
 from pytesseract import Output as TessOutput
 
-# New imports for PDF, DOCX, TXT
-from PyPDF2 import PdfReader
-from docx import Document
+# New imports for PDF
+from pdf2image import convert_from_bytes
 
 # ===================== APP =====================
 app = Dash(__name__)
 app.title = "OCR Dashboard"
 
-# ===================== OCR FUNCTION (EXTENDED FOR PDF, DOCX, TXT) =====================
+# ===================== OCR FUNCTION (FOR PDF AND IMAGE) =====================
 def extract_text_and_confidence(contents):
+    raw_lines = []
+
     content_type, content_string = contents.split(",")
     content_type = content_type.lower()
 
     # PDF extraction
     if "pdf" in content_type:
         decoded = base64.b64decode(content_string)
-        reader = PdfReader(io.BytesIO(decoded))
-        lines = []
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                lines.extend(text.splitlines())
-        return "\n".join(lines).strip(), 100
 
-    # DOCX extraction
-    if "word" in content_type or "docx" in content_type:
-        decoded = base64.b64decode(content_string)
-        doc = Document(io.BytesIO(decoded))
-        lines = [p.text for p in doc.paragraphs if p.text.strip()]
-        return "\n".join(lines).strip(), 100
+        images = convert_from_bytes(decoded, dpi=120)
+        images = images[:1]
 
-    # TXT extraction
-    if "text" in content_type:
-        decoded = base64.b64decode(content_string)
-        text = decoded.decode("utf-8", errors="ignore")
-        return text.strip(), 100
+        final_lines = []
+        raw_lines = []
+        confidences = []
+
+        for img in images:
+
+            image_np = np.array(img)
+            gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+            gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+            gray = cv2.threshold(
+                gray, 0, 255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU
+            )[1]
+
+            data = pytesseract.image_to_data(
+                gray,
+                output_type=TessOutput.DICT,
+                config="--oem 3 --psm 6"
+            )
+
+            structured = {}
+
+            for i in range(len(data["text"])):
+                word = data["text"][i].strip()
+
+                try:
+                    conf = float(data["conf"][i])
+                except:
+                    conf = 0
+
+                if word and conf > 30:
+                    block = data["block_num"][i]
+                    par = data["par_num"][i]
+                    line = data["line_num"][i]
+
+                    structured.setdefault(block, {})
+                    structured[block].setdefault(par, {})
+                    structured[block][par].setdefault(line, {"words": []})
+
+                    structured[block][par][line]["words"].append(word)
+
+                    confidences.append(conf)
+                    
+                    
+            for block in structured:
+                for par in structured[block]:
+                    for line_key in structured[block][par]:
+
+                        joined_line = " ".join(
+                            structured[block][par][line_key]["words"]
+                        )
+
+                        final_lines.append(joined_line)
+                        raw_lines.append(joined_line)
+
+                    final_lines.append("")
+
+        text = "\n".join(final_lines).strip()
+
+        confidence = round(sum(confidences)/len(confidences), 2) if confidences else 0
+
+        return text, confidence, raw_lines
 
     # IMAGE OCR
     decoded = base64.b64decode(content_string)
     image = Image.open(io.BytesIO(decoded))
+    print("STEP 2: Image opened successfully")
+    image.thumbnail((1200, 1200))
     if image.mode != "RGB":
         image = image.convert("RGB")
 
     image_np = np.array(image)
     gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    print("STEP 3: Converted to grayscale")
 
+    # Reduce noise
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # Improve text clarity
+    gray = cv2.threshold(
+        gray,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )[1]
+
+    print("STEP 4: Starting OCR...")
     data = pytesseract.image_to_data(
         gray,
         output_type=TessOutput.DICT,
         config="--psm 6"
     )
+    print("STEP 5: OCR completed")
 
     structured = {}
     confidences = []
 
     for i in range(len(data["text"])):
         word = data["text"][i].strip()
-        conf = int(data["conf"][i])
+        try:
+            conf = float(data["conf"][i])
+        except:
+            conf = 0
 
-        if word and conf > 0:
+        if word and conf > 30:
             block = data["block_num"][i]
             par = data["par_num"][i]
             line = data["line_num"][i]
@@ -92,21 +161,63 @@ def extract_text_and_confidence(contents):
             final_lines.append("")  # paragraph spacing
 
     text = "\n".join(final_lines).strip()
-    confidence = round(sum(confidences) / len(confidences), 2) if confidences else 0
+    valid_conf = confidences
+    confidence = round(sum(valid_conf) / len(valid_conf), 2) if valid_conf else 0
 
     return text, confidence
 
 # ===================== DOCUMENT TYPE DETECTION =====================
 def detect_document_type(text):
     t = text.lower()
-    if any(k in t for k in ["aadhaar card", "pan card", "uidai", "dob"]):
+
+    # Identity Documents
+    if any(k in t for k in [
+        "aadhaar", "aadhaar card", "pan card",
+        "uidai", "date of birth", "dob",
+        "passport", "driving licence", "voter id"
+    ]):
         return "Identity Document"
-    if any(k in t for k in ["certificate", "degree", "university", "college"]):
-        return "Educational Certificate"
-    if any(k in t for k in ["invoice", "gst", "total", "amount", "tax"]):
-        return "Invoice / Bill"
-    if any(k in t for k in ["resume", "skills", "experience", "education"]):
+
+    # Resume / CV
+    elif any(k in t for k in [
+        "resume", "curriculum vitae", "skills",
+        "experience", "objective", "projects",
+        "technical skills", "internship"
+    ]):
         return "Resume / CV"
+
+    # Invoice / Bill
+    elif any(k in t for k in [
+        "invoice", "gst", "tax invoice",
+        "bill no", "total amount", "subtotal",
+        "cgst", "sgst", "amount payable"
+    ]):
+        return "Invoice / Bill"
+
+    # Educational Certificate
+    elif any(k in t for k in [
+        "certificate", "degree certificate",
+        "marks card", "semester", "university",
+        "board of examination", "grade sheet"
+    ]):
+        return "Educational Certificate"
+
+    # Project / Internship Report
+    elif any(k in t for k in [
+        "project report", "internship report",
+        "submitted by", "guided by",
+        "department of", "academic year"
+    ]):
+        return "Project / Academic Report"
+
+    # Research Paper
+    elif any(k in t for k in [
+        "abstract", "methodology",
+        "literature survey", "conclusion",
+        "references", "research paper"
+    ]):
+        return "Research Paper"
+
     return "General Document"
 
 def highlight_text(text, query):
@@ -119,12 +230,12 @@ def highlight_text(text, query):
 
     result = []
     for i, part in enumerate(parts):
-        result.append(part)
+        result.append(html.Span(part))
         if i < len(matches):
             result.append(
                 html.Mark(matches[i], style={"backgroundColor": "#ffe066"})
             )
-    return result
+    return html.Span(result)
 
 
 # ===================== LAYOUT =====================
@@ -163,7 +274,7 @@ app.layout = html.Div(
                     id="upload-image",
                     children=html.Div([
                         html.I("📤 ", style={"fontSize": "26px"}),
-                        html.B("Upload Image/PDF/Docx/TXT")
+                        html.B("Upload Image/PDF")
                     ]), 
                     style={
                         "width": "100%",
@@ -225,6 +336,11 @@ app.layout = html.Div(
                                 "boxShadow": "0 15px 35px rgba(0,0,0,0.15)"
                             },
                             children=[
+
+                                html.Div(
+                                    id="file-info",
+                                    style={"fontWeight": "600","fontSize": "16px","marginBottom": "10px","color": "#333"}
+                                ),
 
                                 html.Div(
                                     id="doc-type",
@@ -305,7 +421,9 @@ app.layout = html.Div(
                                     }
                                 ),
 
-                                dcc.Download(id="download-text")
+                                dcc.Download(id="download-text"),
+                                dcc.Store(id="stored-text")
+
                             ]
                         )
                     ]
@@ -317,35 +435,78 @@ app.layout = html.Div(
 
 # ===================== CALLBACK =====================
 @app.callback(
+    Output("file-info", "children"),
     Output("doc-type", "children"),
-    Output("output-text", "children"),
     Output("confidence-text", "children"),
     Output("count-text", "children"),
     Output("confidence-bar", "style"),
     Output("file-preview-container", "children"),
+    Output("stored-text", "data"),
+
     Input("upload-image", "contents"),
-    Input("search-input", "value"),
-
+    
+    State("upload-image", "filename"),
 )
-def update_ui(contents , search):
-    if contents is None:
-        return "", "", "", {"width": "0%", "background": "#2ecc71"}, ""
 
-    text, confidence = extract_text_and_confidence(contents)
-    lines = [l for l in text.splitlines() if l.strip()]
-    line_count = len(lines)
+def update_ui(contents, filename):
+    if contents is None:
+        return (
+            "",   # file-info
+            "",   # doc-type
+            "",   # confidence-text
+            "",   # count-text
+            {     # confidence-bar style
+                "height": "20px",
+                "width": "0%",
+                "background": "#2ecc71",
+                "transition": "0.6s"
+            },
+            "",   # preview
+            ""    # stored-text
+        )
+    
+    result = extract_text_and_confidence(contents)
+    if len(result) == 3:
+        text, confidence, raw_lines = result
+    else:
+        text, confidence = result
+        raw_lines = [l for l in text.splitlines() if l.strip()]
+
+    conf_value = confidence if confidence is not None else 0
+    conf_value = min(max(conf_value, 0), 100)
+    line_count = len(raw_lines)
     word_count = len(re.findall(r'\b\w+\b', text))
-    display_text = highlight_text(text, search)
     doc_type = detect_document_type(text)
+    conf_display = (
+    f"{confidence:.2f} %" if confidence is not None else "N/A"
+)
+
+    if conf_value >= 80:
+        bar_color = "#2ecc71"   # Green
+    elif conf_value >= 50:
+        bar_color = "#f1c40f"   # Yellow
+    else:
+        bar_color = "#e74c3c"   # Red
 
     bar_style = {
         "height": "20px",
-        "width": f"{confidence}%",
-        "background": "#2ecc71",
+        "width": f"{conf_value}%",
+        "background": bar_color,
         "transition": "0.6s"
-    }
+}
 
     content_type, content_string = contents.split(",")
+    current_time = datetime.now().strftime("%d %B %Y, %I:%M %p")
+
+    file_name_display = filename if filename else "Unknown File"
+
+    file_info = (
+        f"📄 File Name: {file_name_display}    |    "
+        f"🕒 Processed On: {current_time}"
+    )
+
+    print("STEP 1: File received")
+    print("Content Type:", content_type)
 
     # Generic preview for all file types
     if content_type.startswith("data:image"):
@@ -370,27 +531,50 @@ def update_ui(contents , search):
         preview = html.Div("Cannot preview this file type.", style={"padding": "20px", "color": "red"})
 
     return (
+        file_info,
         f"📌 Document Type: {doc_type}",
-        display_text,
-        f"Confidence Score: {confidence} %",
-        f"📄 Lines: {line_count}   |   🔤 Words: {word_count}",
+        f"📈 Confidence Score: {conf_display}",
+        f"📏 Lines: {line_count}   |   🔤 Words: {word_count}",
         bar_style,
-        preview
+        preview,
+        text
     )
+@app.callback(
+    Output("output-text", "children"),
+    Input("stored-text", "data"),
+    Input("search-input", "value")
+)
+def update_search_output(stored_text, search):
+    if not stored_text:
+        return ""
+
+    return highlight_text(stored_text, search)
 
 # ===================== DOWNLOAD =====================
 @app.callback(
     Output("download-text", "data"),
     Input("download-btn", "n_clicks"),
-    State("output-text", "children"),
+    State("upload-image", "contents"),
     State("confidence-text", "children"),
     prevent_initial_call=True,
 )
-def download_text(n_clicks, text, confidence):
-    if not text:
+def download_text(n_clicks, contents, confidence):
+    if not contents:
         return None
+
+    result = extract_text_and_confidence(contents)
+
+    if len(result) == 3:
+        text, extracted_confidence, raw_lines = result
+    else:
+        text, extracted_confidence = result
+
     content = f"{confidence}\n\nExtracted Text:\n{text}"
-    return dict(content=content, filename="ocr_output.txt")
+
+    return dict(
+        content=content,
+        filename="ocr_output.txt"
+    )
 
 # ===================== RUN =====================
 if __name__ == "__main__":
