@@ -1,15 +1,13 @@
 # Smart OCR System
 
 ## Project Overview
-Smart OCR System is an academic project developed to extract text from multiple document formats using Optical Character Recognition (OCR). The system allows users to upload images, PDFs, Word documents, or text files and automatically extracts the text content.
+Smart OCR System is an academic project developed to extract text from multiple document formats using Optical Character Recognition (OCR). The system allows users to upload images or PDFs and automatically extracts the text content.
 
 The application provides a clean web interface where users can upload files, view extracted text, search within the extracted content, and download the results.
 
 ## Features
 - Extract text from Images (JPG, PNG, JPEG)
 - Extract text from PDF files
-- Extract text from Word documents (.docx)
-- Extract text from Text files (.txt)
 - Drag and drop file upload interface
 - Preview uploaded documents
 - Confidence score display for OCR results
@@ -24,17 +22,19 @@ The application provides a clean web interface where users can upload files, vie
 - OpenCV (Image Processing)
 - Pytesseract (OCR Engine)
 - NumPy
-- PyPDF2
-- python-docx
+- Pandas
+- PDF2Image
+- Base64
+- Regex
 - PIL (Python Imaging Library)
 
 ## How the System Works
-1. The user uploads a document (image, PDF, DOCX, or TXT).
+1. The user uploads a document.
 2. The system processes the file.
 3. If the file is an image, OCR is applied using Pytesseract.
-4. If the file is PDF, DOCX, or TXT, text is extracted directly.
+4. If the file is PDF, it is first converted into image using PDF2Image and then OCR is applied.
 5. The extracted text is displayed in the interface.
-6. The system calculates confidence score, word count, and line count.
+6. The system calculates confidence score, word count, line count, and detects document type. 
 7. Users can search within the text and download the results.
 
 ## How to Run the Project
@@ -45,7 +45,6 @@ git clone https://github.com/aishwaryahebbar07/OCR-Project.git
 cd OCR-Project
 
 3. Install required libraries  
-pip install dash opencv-python pytesseract numpy pillow PyPDF2 python-docx
 
 4. Run the application  
 python app.py
