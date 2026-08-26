@@ -1,7 +1,7 @@
-# OptiScan OCR 
+# An OCR - Based Intelligent Text Extraction And Analysis System 
 
 ## Project Overview
-OptiScan OCR ( An OCR-based intelligent text extraction and analysis system ) is an academic project developed to extract text from multiple document formats using Optical Character Recognition (OCR). The system allows users to upload images or PDFs and automatically extracts the text content.
+An OCR-based intelligent text extraction and analysis system is an academic project developed to extract text from multiple document formats using Optical Character Recognition (OCR). The system allows users to upload images or PDFs and automatically extracts the text content.
 
 The application provides a clean web interface where users can upload files, view extracted text, search within the extracted content, and download the results.
 
